@@ -17,16 +17,31 @@ object Main extends ZIOCliDefault:
   private val testCmd = Command("test", Options.none, profileArg)
     .withHelp(HelpDoc.p("Test connectivity to a profile without launching rainfrog"))
 
+  private val addCmd = Command("add", Options.none, profileArg)
+    .withHelp(HelpDoc.p("Add a new connection profile interactively"))
+
+  private val editCmd = Command("edit", Options.none, profileArg)
+    .withHelp(HelpDoc.p("Edit an existing connection profile interactively"))
+
+  private val removeCmd = Command("remove", Options.none, profileArg)
+    .withHelp(HelpDoc.p("Remove a connection profile"))
+
   sealed trait Subcommand
-  case class Connect(profile: String) extends Subcommand
-  case object ListProfiles             extends Subcommand
-  case class Test(profile: String)     extends Subcommand
+  case class Connect(profile: String)       extends Subcommand
+  case object ListProfiles                  extends Subcommand
+  case class Test(profile: String)          extends Subcommand
+  case class AddProfile(profile: String)    extends Subcommand
+  case class EditProfile(profile: String)   extends Subcommand
+  case class RemoveProfile(profile: String) extends Subcommand
 
   private val command: Command[Subcommand] =
     Command("rainfrogger").subcommands(
       connectCmd.map(Connect(_)),
       listCmd.as(ListProfiles),
-      testCmd.map(Test(_))
+      testCmd.map(Test(_)),
+      addCmd.map(AddProfile(_)),
+      editCmd.map(EditProfile(_)),
+      removeCmd.map(RemoveProfile(_))
     )
 
   val cliApp = CliApp.make(
@@ -37,9 +52,12 @@ object Main extends ZIOCliDefault:
   )(run)
 
   private def run(sub: Subcommand): ZIO[Any, Any, Any] = sub match
-    case Connect(name) => connect(name)
-    case ListProfiles  => list
-    case Test(name)    => test(name)
+    case Connect(name)       => connect(name)
+    case ListProfiles        => list
+    case Test(name)          => test(name)
+    case AddProfile(name)    => add(name)
+    case EditProfile(name)   => edit(name)
+    case RemoveProfile(name) => remove(name)
 
   private def connect(name: String): ZIO[Any, Throwable, ExitCode] =
     ZIO.scoped:
@@ -77,3 +95,27 @@ object Main extends ZIOCliDefault:
         _ <- Rainfrog.testConnection(profile.db, tunnel)
         _ <- Console.printLine(s"OK — $name is reachable")
       yield ()
+
+  private def add(name: String): ZIO[Any, Throwable, Unit] =
+    for
+      profile <- ProfileManager.collectProfile()
+      _       <- ProfileManager.addProfile(name, profile)
+      _       <- Console.printLine(s"Saved profile '$name'.")
+    yield ()
+
+  private def edit(name: String): ZIO[Any, Throwable, Unit] =
+    for
+      existing <- ProfileManager.loadExisting(name)
+      profile  <- ProfileManager.collectProfile(Some(existing))
+      _        <- ProfileManager.editProfile(name, profile)
+      _        <- Console.printLine(s"Updated profile '$name'.")
+    yield ()
+
+  private def remove(name: String): ZIO[Any, Throwable, Unit] =
+    for
+      confirmed <- ProfileManager.promptYesNo(s"Remove profile '$name'?", default = false)
+      _ <- ZIO.when(confirmed):
+             ProfileManager.removeProfile(name) *> Console.printLine("Removed.")
+      _ <- ZIO.unless(confirmed):
+             Console.printLine("Cancelled.")
+    yield ()

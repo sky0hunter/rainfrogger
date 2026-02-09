@@ -5,6 +5,8 @@ import zio.config.*
 import zio.config.magnolia.*
 import zio.config.typesafe.*
 
+import com.typesafe.config.{Config as TSConfig, ConfigFactory, ConfigRenderOptions}
+
 import java.nio.file.{Files, Path, Paths}
 import java.nio.file.attribute.PosixFilePermission
 import scala.jdk.CollectionConverters.*
@@ -55,9 +57,25 @@ object AppConfig:
         val available = cfg.profiles.keys.mkString(", ")
         new RuntimeException(s"Profile '$name' not found. Available: $available")
 
+  def loadRaw: Task[TSConfig] = ZIO.attempt:
+    if Files.exists(configFile) then
+      ConfigFactory.parseFile(configFile.toFile)
+    else
+      ConfigFactory.empty()
+
+  def saveRaw(config: TSConfig): Task[Unit] = ZIO.attempt:
+    Files.createDirectories(configDir)
+    val opts = ConfigRenderOptions.defaults()
+      .setOriginComments(false)
+      .setComments(false)
+      .setJson(false)
+    Files.writeString(configFile, config.root().render(opts))
+    val perms600 = Set(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE).asJava
+    Files.setPosixFilePermissions(configFile, perms600)
+
   private def ensureConfigExists: Task[Unit] =
     ZIO.unless(Files.exists(configFile)):
-      ZIO.fail(new RuntimeException(s"Config not found at $configFile\nCreate it with your connection profiles."))
+      ZIO.fail(new RuntimeException(s"Config not found at $configFile\nCreate it with 'rainfrogger add <name>' or by hand."))
     .unit
 
   private def enforcePermissions: Task[Unit] = ZIO.attempt:
