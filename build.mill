@@ -1,0 +1,44 @@
+package build
+
+import mill.*
+import mill.scalalib.*
+import mill.javalib.NativeImageModule
+
+object rainfrogger extends ScalaModule with NativeImageModule {
+
+  def scalaVersion = "3.7.4"
+  def mainClass    = Some("rainfrogger.Main")
+
+  def mvnDeps = Seq(
+    mvn"dev.zio::zio:2.1.21",
+    mvn"dev.zio::zio-cli:0.7.5",
+    mvn"dev.zio::zio-config:4.0.6",
+    mvn"dev.zio::zio-config-typesafe:4.0.6",
+    mvn"dev.zio::zio-config-magnolia:4.0.6"
+  )
+
+  def scalacOptions = Seq(
+    "-Wunused:imports",
+    "-pagewidth:120",
+    "-deprecation"
+  )
+
+  def nativeImageJvmId = "graalvm-community:23"
+
+  def nativeImageOptions = Seq(
+    "--no-fallback",
+    "--initialize-at-build-time=scala,izumi.reflect",
+    "--install-exit-handlers",
+    "-H:+UnlockExperimentalVMOptions",
+    "-H:+ReportExceptionStackTraces",
+    "-H:IncludeResources=.*\\.conf",
+    "-H:IncludeResources=.*\\.properties"
+  )
+
+  object test extends ScalaTests with TestModule.ZioTest {
+    def mvnDeps = Seq(
+      mvn"dev.zio::zio-test:2.1.21",
+      mvn"dev.zio::zio-test-sbt:2.1.21"
+    )
+  }
+}

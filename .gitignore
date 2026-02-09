@@ -1,0 +1,6 @@
+out/
+.idea/
+.bsp/
+.metals/
+*.class
+*.log
